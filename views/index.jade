@@ -1,0 +1,125 @@
+doctype html
+html(lang='en')
+  head
+    - var staticPath = req.baseUrl + '/static'
+    - var gosgfPath = req.baseUrl + '/gosgf'
+    meta(charset='utf-8')
+    title= app.get('title')
+    link(href=staticPath+'/css/style.css', media='all', type='text/css', rel='stylesheet')
+    link(href=staticPath+'/css/font-awesome.css', media='all', type='text/css' rel='stylesheet')
+    link(href='https://fonts.googleapis.com/css?family=Open+Sans:400,700,400italic,700italic', rel='stylesheet', type='text/css')
+    style.
+      body{font-family:'Open Sans'}
+      .fa-spin-rev {
+        -webkit-animation: fa-spin-rev 2s infinite linear;
+        animation: fa-spin-rev 2s infinite linear;
+      }
+      @-webkit-keyframes fa-spin-rev {
+        0% {
+          -webkit-transform: rotate(202deg);
+          transform: rotate(202deg);
+        }
+        100% {
+          -webkit-transform: rotate(-157deg);
+          transform: rotate(-157deg);
+        }
+      }
+      @keyframes fa-spin-rev {
+        0% {
+          -webkit-transform: rotate(202deg);
+          transform: rotate(202deg);
+        }
+        100% {
+          -webkit-transform: rotate(-157deg);
+          transform: rotate(-157deg);
+        }
+      }
+    script(type='text/javascript')
+      != 'window.GOSGF_FETCH='+JSON.stringify(req.baseUrl + '/fetch')+';'
+    script(type='text/javascript', src=staticPath+'/jquery-2.1.4.min.js')
+    script(type='text/javascript', src=gosgfPath+'/gosgf.js')
+    script(type='text/javascript', src=gosgfPath+'/jquery.gosgf.js')
+    script(type='text/javascript', src=staticPath+'/view.js')
+  body.go-sgf-view
+    div.go-sgf-board
+    div.go-sgf-ctrl-toggle
+      span.fa.left.fa-angle-double-left
+      span.fa.right.fa-angle-double-right
+      span.fa.up.fa-angle-double-up
+      span.fa.down.fa-angle-double-down
+    div.go-sgf-controls
+      div.go-sgf-nav
+        button(data-action='first', title='Root')
+          span.fa.fa-fast-backward
+        button(data-action='prev', title='Previous move')
+          span.fa.fa-step-backward
+        button(data-action='next', title='Next move (first variations)')
+          span.fa.fa-step-forward
+        button(data-action='last', title='Last move (first variations)')
+          span.fa.fa-fast-forward
+        div
+          button.go-sgf-toggle(title='Auto replay', data-action='toggle', data-off='.fa-play', data-on='.fa-pause', data-timeout-src='#tm-delay', data-state-info='#pb-state')
+            span.fa.fa-play
+            span.fa.fa-pause(style='display:none')
+          input#tm-delay(type='number', min='1', max='99', value='10')
+          span#pb-state paused
+      hr
+      h1.go-sgf-title -
+      a.go-sgf-link(target='_blank', style='display:none')= ''
+      p.note.go-sgf-result(style='display:none')
+      hr
+      div.go-sgf-players
+        div.go-sgf-white
+          span.fa.fa-circle-o
+          = ' '
+          span.go-sgf-white-name White
+          = ' '
+          span.go-sgf-captured
+            != ' &ndash; prisonners: '
+            span.fa.fa-circle
+            != '&nbsp;'
+            span.go-sgf-white-prisonners 0
+        div.go-sgf-black
+          span.fa.fa-circle
+          = ' '
+          span.go-sgf-black-name Black
+          = ' '
+          span.go-sgf-captured
+            != ' &ndash; prisonners: '
+            span.fa.fa-circle-o
+            != '&nbsp;'
+            span.go-sgf-black-prisonners 0
+      textarea.go-sgf-comment(disabled)
+      hr
+      button.go-sgf-loader(type='button', data-form='#load-url')
+        span.fa.fa-download= ''
+        != '&nbsp;Sgf&nbsp;file&nbsp;from&nbsp;link'
+      button.go-sgf-loader(type='button', data-form='#load-local')
+        span.fa.fa-file-o= ''
+        != '&nbsp;Local&nbsp;sgf&nbsp;file'
+      div.go-sgf-history(style='display:none')
+        h2 Recently opened
+        ul
+        p.note (use browser's local storage to track history)
+    div.go-sgf-loading
+      div.fa.fa-spin-rev.fa-cog
+      div.fa.fa-spin.fa-cog
+      div.fa.fa-spin-rev.fa-cog
+    div#overlay(style='display:none')= ''
+    form#load-url(data-type='url', data-overlay='#overlay', action=req.baseUrl+'/fetch', style='display:none')
+      h2 Remote SGF file
+      p.note
+        | For security reasons, only files from the following (trusted) websites
+        | are accepted:
+        br
+        each host, index in Object.keys(app.trusted)
+          if index
+            = ', '
+          a(href='http://'+host+'/', target='_blank')= host
+      input(name='url', type='url', placeholder='http://')
+      button
+        span.fa.fa-download= ''
+        != '&nbsp;Load'
+    form#load-local(data-type='file', data-overlay='#overlay', style='display:none')
+      h2 Local SGF file
+      input(name='file', type='file' accept='.sgf,application/x-go-sgf')
