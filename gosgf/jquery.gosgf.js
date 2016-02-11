@@ -77,32 +77,56 @@
   GoSgfViewer.prototype = {
     /* _create([options,] [container]) */
     _create: function (options, container) {
+      var self = this;
+
       if (!$.isPlainObject(options)) {
         container = options;
         options = {};
       }
 
-      this.options = {
+      self.options = {
         coordinates: true,
         defaultSize: [SIZE, SIZE],
         viewBoxOffset: VB_OFF, /* for clean 1:1 rendering with odd stroke-width */
         scale: SCALE,
-        style: 'inline'
+        style: 'inline',
+        edit: false,
+        action: 'stone',
+        edited: null /* event when edit == true */
       };
 
-      this.option(options||{}, true);
+      self.option(options||{}, true);
 
-      container = this._container = $(container||'body');
+      container = self._container = $(container||'body');
 
       if (!container.length) throw new Error("Invalid container");
 
-      this._svgWrapper = $('<div class="sgf-viewer-svg"/>').appendTo(container);
+      self._svgWrapper = $('<div class="sgf-viewer-svg"/>').appendTo(container);
 
       if (container.data('sgf')) {
-        this.sgfData(container.data('sgf'));
+        self.sgfData(container.data('sgf'));
       } else {
-        this.redraw();
+        self.redraw();
       }
+    },
+    _editActions: {
+      CR: 'circle',
+      circle: 'circle',
+      MA: 'cross',
+      cross: 'cross',
+      SL: 'selected',
+      selected: 'selected',
+      SQ: 'square',
+      square: 'square',
+      TR: 'triangle',
+      triangle: 'triangle',
+      DD: 'dimmed',
+      dimmed: 'dimmed',
+      LB: 'label',
+      label: 'label',
+      alpha: 'alpha', /* auto label */
+      number: 'number', /* auto label */
+      stone: 'stone'
     },
     /* _setOption(key, value [, preventRefresh]) */
     _setOption: function (key, value, preventRefresh) {
@@ -126,6 +150,13 @@
         case 'style':
           if (value !== 'inline' && value !== 'css') return;
           break;
+        case 'action':
+          value = this._editActions[value];
+          if (!value) return;
+          redraw = false;
+          break;
+        case 'edit':
+          value = !!value;
         default:
           redraw = false;
       }
@@ -133,7 +164,11 @@
       this.options[key] = value;
 
       if (preventRefresh) return redraw;
-      if (redraw) this.redraw();
+      if (redraw) {
+        this.redraw();
+      } else if (key === 'edit') {
+        this.edit();
+      }
     },
     /* option([key [, value] [, preventRefresh]]) */
     option: function (key, value, preventRefresh) {
@@ -156,6 +191,90 @@
       }
 
       if (!preventRefresh && needRedraw) this.redraw();
+    },
+    _svgOnClick: function (evt) {
+      /* Must be bound to the instance before used! */
+
+      /* No support for old browser versions */
+      var x, y,
+          infos = this.svgInfos(),
+          vb = infos.viewBox,
+          sz = infos.board.size,
+          scale = infos.scale,
+          rect = this._svg.getBoundingClientRect();
+
+      x = evt.clientX - rect.left;
+      y = evt.clientY - rect.top;
+      /* coordinates relative to the top-right corner of the board
+       * (center of stones) */
+      x = (x * vb.width / rect.width) + vb.left;
+      y = (y * vb.height / rect.height) + vb.top;
+      /* now translate thoses into intersection coordinates */
+      x = floor(0.5 + x / scale);
+      y = floor(0.5 + y / scale);
+
+      /* check for board bounds */
+      if (x < 0 || x >= sz[0] || y < 0 || y >= sz[1]) return;
+
+      this.click(x, y, {
+        shift:evt.shiftKey,
+        ctrl:evt.ctrlKey,
+        alt:evt.altKey
+      });
+    },
+    edit: function (edit) {
+      var self = this;
+
+      if (arguments.length === 0) {
+        edit = self.options.edit;
+      } else {
+        self.options.edit = !!edit;
+      }
+
+      if (!self._svg) return; /* target element doesn't exist yet. */
+
+      self._svg.onclick = edit ? self._svgOnClick.bind(self) : null;
+    },
+    click: function (x, y, mods) {
+      var o = this.options,
+          clk = o.edited,
+          value;
+      if (!o.edit) return; /* edit mode required */
+      if (arguments.length === 1) {
+        o.edited = x;
+      } else if (arguments.length >= 2) {
+        mods = mods||{};
+        this._editDoAction(x, y, mods);
+        if (typeof clk === 'function') clk(x, y, o.action, mods);
+      }
+    },
+    _editDoAction(x, y, mods) {
+      var action = this.options.action,
+          board = this._board;
+      
+      if (!board) return;
+
+      switch (action) {
+        case 'dimmed':
+          action = true; /* for toggleMark() magic */
+        case 'circle':
+        case 'cross':
+        case 'selected':
+        case 'square':
+        case 'triangle':
+          board.toggleMark(x, y, action);
+          break;
+        case 'stone':
+          board.toggleMove(x, y, (mods && mods.shift) ? 'white' : 'black');
+          break;
+        case 'alpha':
+          break;
+        case 'number':
+          break;
+        case 'label':
+          break;
+      }
+      this.redraw();
     },
     sgfData: function (data) {
       this._board = null;
@@ -486,7 +605,8 @@
       close('svg');
 
       self._svgWrapper.html(svg.join(""));
-      self._svg = self._svgWrapper.children('svg');
+      self._svg = self._svgWrapper.children('svg').get(0);
+      self.edit(); /* previous handlers were cleared */
     },
     _: undefined /* placeholder: must be last */
   };
