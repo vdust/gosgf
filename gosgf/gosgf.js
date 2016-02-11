@@ -835,11 +835,12 @@
 
 
 
-  function GameTree() {
-    this.nodes = [];
-    this.variants = [];
+  function GameTree(nodes, variants) {
+    this.nodes = nodes||[];
+    this.variants = variants||[];
   }
   GameTree.prototype = {
+    Node: Node,
     addNode: function (node) {
       if (node) this.nodes.push(node);
     },
@@ -859,14 +860,15 @@
   };
 
   function GoSgf(data) {
+    this._class = GoSgf; /* for self reference */
     this.clear();
     if (data === true) this.addEmpty();
-    else if (data) this.add(data);
+    else if (typeof data === 'string') this.add(data);
+    else if (data && data.nodes) this.collection.push(data);
   }
   GoSgf.prototype = {
     Tokenizer: Tokenizer,
     Spec: Spec,
-    Node: Node,
     GameTree: GameTree,
 
     clear: function () {
@@ -920,7 +922,7 @@
       return gametree;
     },
     _node: function (tokenizer, spec) {
-      var node = new (this.Node)(),
+      var node = new (this.GameTree.prototype.Node)(),
           more = true,
           property = null,
           tok;
@@ -963,16 +965,28 @@
   function Intersection() {
     this.color = NONE;
   }
+  Intersection.getColor = function (color) {
+    var m;
+    if (typeof color === 'string') {
+      if ((/^b(?:lack)?$/i).test(color)) return BLACK;
+      if ((/^w(?:hite)?$/i).test(color)) return WHITE;
+      return NONE;
+    }
+    color = +color;
+    return (color === BLACK ? BLACK : (color === WHITE ? WHITE : NONE));
+  };
+  Intersection.not = function (color) {
+    if (color === undefined) {
+      color = (this ? this.color : NONE);
+    } else color = Intersection.getColor(color);
+    return color === BLACK ? WHITE : (color === WHITE ? BLACK : NONE);
+  };
   Intersection.prototype = {
     NONE: NONE,
     BLACK: BLACK,
     WHITE: WHITE,
-    not: function (color) {
-      if (color === undefined) {
-        color = (this ? this.color : NONE);
-      }
-      return color === BLACK ? WHITE : (color === WHITE ? BLACK : NONE);
-    }
+    getColor: Intersection.getColor,
+    not: Intersection.not
   };
 
   function Nav() { this._init.apply(this, arguments); }
@@ -1009,6 +1023,8 @@
       return this._cursor.length === 1 && this._cursor[0] === 0;
     },
     first: function () {
+      var c = this._cursor;
+      if (c.length === 1 && c[0] === 0) return false;
       this._cursor = [0];
       return true;
     },
@@ -1049,8 +1065,13 @@
     last: function () {
       /* go to the last node through the first variations from the current node */
       var cursor = this._cursor,
-          variant = this._getVariant()[0];
+          v = this._getVariant(),
+          n = v[1],
+          variant = v[0];
 
+      if (!variant.variants.length && n === (variant.nodes.length - 1)) {
+        return false;
+      }
       cursor.pop(); /* pop current node in current variant */
       while (variant.variants.length) {
         cursor.push(0);
@@ -1204,7 +1225,7 @@
       }
 
       return merge(nodes, variant.nodes.slice(i == fpl ? fromPath[i]+1 : 0, path[i] + 1));
-    },
+    }
   };
 
   function Rect(x, y, w, h) {
@@ -1332,6 +1353,8 @@
 
       if (!('VW' in node)) return;
 
+      self._VW = node.VW; /* save the active VW property */
+
       for (i = 0; i < board.length; i++) {
         delete board[i].hidden;
       }
@@ -1367,6 +1390,16 @@
 
       return new self.Rect(x, y, Mx - mx + 1, My - my + 1);
     },
+    MARKS: [
+      {p: 'DD', mark: { dimmed: true }},
+      {p: 'LB', mark: {}, composed: true}, /* special case */
+      /* following marks are mutually exclusive */
+      {p: 'CR', mark: { type: 'circle' }},
+      {p: 'MA', mark: { type: 'cross' }},
+      {p: 'SL', mark: { type: 'selected' }},
+      {p: 'SQ', mark: { type: 'square' }},
+      {p: 'TR', mark: { type: 'triangle' }}
+    ],
     updateMarks: function (node) {
       var self = this,
           board = self._board,
@@ -1382,16 +1415,7 @@
         }
       }
 
-      each([
-        {p: 'DD', mark: { dimmed: true }},
-        {p: 'LB', mark: {}, composed: true}, /* special case */
-        /* following marks are mutually exclusive */
-        {p: 'CR', mark: { type: 'circle' }},
-        {p: 'MA', mark: { type: 'cross' }},
-        {p: 'SL', mark: { type: 'selected' }},
-        {p: 'SQ', mark: { type: 'square' }},
-        {p: 'TR', mark: { type: 'triangle' }}
-      ], function (def) {
+      each(self.MARKS, function (def) {
         each(node[def.p]||[], function (point) {
           var value = {}, i;
           if (def.composed) {
@@ -1404,35 +1428,36 @@
         });
       });
     },
+    INFO_PROPERTIES: [
+      {p: 'AN', k: 'annotator'},
+      {p: 'BR', k: 'blackrank'},
+      {p: 'BT', k: 'blackteam'},
+      {p: 'CP', k: 'copy'},
+      {p: 'DT', k: 'date'},
+      {p: 'EV', k: 'event'},
+      {p: 'GC', k: 'gamecomment'},
+      {p: 'ON', k: 'opening'},
+      {p: 'OT', k: 'overtime'},
+      {p: 'PB', k: 'blackplayer'},
+      {p: 'PC', k: 'location'},
+      {p: 'PW', k: 'whiteplayer'},
+      {p: 'RE', k: 'result'},
+      {p: 'RO', k: 'round'},
+      {p: 'RU', k: 'rules'},
+      {p: 'SO', k: 'source'},
+      {p: 'TM', k: 'maintime'},
+      {p: 'US', k: 'user'},
+      {p: 'WR', k: 'whiterank'},
+      {p: 'WT', k: 'whiteteam'},
+      {p: 'C', k: 'nodecomment', clear: 1},
+      {p: 'BL', k: 'blacktimeleft', clear: 1},
+      {p: 'OB', k: 'blackmovesleft', clear: 1},
+      {p: 'OW', k: 'whitemovesleft', clear: 1},
+      {p: 'WL', k: 'whitetimeleft', clear: 1}
+    ],
     updateInfos: function (node) {
       var infos = this.infos;
-      each([
-        {p: 'AN', k: 'annotator'},
-        {p: 'BR', k: 'blackrank'},
-        {p: 'BT', k: 'blackteam'},
-        {p: 'CP', k: 'copy'},
-        {p: 'DT', k: 'date'},
-        {p: 'EV', k: 'event'},
-        {p: 'GC', k: 'gamecomment'},
-        {p: 'ON', k: 'opening'},
-        {p: 'OT', k: 'overtime'},
-        {p: 'PB', k: 'blackplayer'},
-        {p: 'PC', k: 'location'},
-        {p: 'PW', k: 'whiteplayer'},
-        {p: 'RE', k: 'result'},
-        {p: 'RO', k: 'round'},
-        {p: 'RU', k: 'rules'},
-        {p: 'SO', k: 'source'},
-        {p: 'TM', k: 'maintime'},
-        {p: 'US', k: 'user'},
-        {p: 'WR', k: 'whiterank'},
-        {p: 'WT', k: 'whiteteam'},
-        {p: 'C', k: 'nodecomment', clear: 1},
-        {p: 'BL', k: 'blacktimeleft', clear: 1},
-        {p: 'OB', k: 'blackmovesleft', clear: 1},
-        {p: 'OW', k: 'whitemovesleft', clear: 1},
-        {p: 'WL', k: 'whitetimeleft', clear: 1}
-      ], function (def) {
+      each(this.INFO_PROPERTIES, function (def) {
         if (def.clear) delete infos[def.k];
         if (def.p in node) {
           infos[def.k] = node[def.p];
@@ -1525,7 +1550,7 @@
         });
       } catch (e) {
         if (e.___illegal) {
-          self._renderedNav = null; /* Next renderer*/
+          self._renderedNav = null;
           return false;
         }
         throw e;
@@ -1538,6 +1563,135 @@
       if (!this.nav.next()) return false;
       this.nav.variant(variant);
       return this.render();
+    },
+    getFlatSgf: function () {
+      /* Create a GoSgf object with data flattened to root node */
+      var self = this,
+          node = new (GameTree.prototype.Node)(),
+          sz = self._boardsize,
+          board = self._board,
+          SpecProto = Spec.prototype,
+          itn, i, j, p, mark, label, props, hasHidden, vw = [];
+
+      node.FF = 4; /* spec version */
+      node.CA = 'utf8';
+      node.GM = 1; /* game mode (1 = Go) */
+      node.SZ = sz;
+      each(self.INFO_PROPERTIES, function (def) {
+        if (def.k in self.infos) node[def.p] = self.infos[def.k];
+      });
+
+      for (j = 0; j < sz[1]; j++) {
+        for (i = 0; i < sz[0]; i++) {
+          itn = board[i + sz[0] * j];
+          props = [];
+          label = null;
+          p = new (SpecProto.Point)(i, j);
+          mark = itn.mark;
+          if (itn.color !== NONE) {
+            props.push({k: itn.color === BLACK ? 'AB' : 'AW', v: p});
+          }
+          if (mark) {
+            each(self.MARKS, function (def) {
+              if (def.mark.dimmed && mark.dimmed) {
+                props.push({k: def.p, v: p});
+              } else if (def.composed && mark.label) {
+                props.push({k: def.p, v: new (SpecProto.Composed)(p, mark.label)});
+              } else if (def.mark.type == mark.type) {
+                props.push({k: def.p, v: p});
+              }
+            });
+          }
+          each(props, function (prop) {
+            if (!(prop.k in node)) node[prop.k] = [];
+            node[prop.k].push(prop.v);
+          });
+
+          if (itn.hidden) hasHidden = true;
+          else vw.push(p);
+        }
+      }
+      if (hasHidden) node.VW = vw; /* board partially visible */
+      return new GoSgf(new GameTree([node]));
+    },
+    toggleState: function (x, y, target) {
+      /* note: This is a quick editing tool that doesn't modify the underlying
+       * gametree. Rendering the board again will clear the modifications.
+       * one can use getFlatSgf() to save the state of the board as a
+       * single-node gametree after toggleState() is called.
+       *
+       * target = {
+       *  color: BLACK|WHITE|NONE, // optional
+       *  mark: { ... }
+       * }
+       */
+      var itn = this._board[x + this._boardsize[0] * y],
+          orig = {},
+          c, mark;
+
+      this._renderedNav = null; /* no more nav sync at this point. */
+
+      if ('color' in target) {
+        orig.color = itn.color;
+        c = itn.getColor(target.color);
+        itn.color = (itn.color !== NONE) ? NONE : c;
+      }
+      if ('hidden' in target) {
+        orig.hidden = itn.hidden;
+        itn.hidden = (itn.hidden && target.hidden) ? false : !!target.hidden;
+        if (!itn.hidden) delete itn.hidden;
+      }
+      mark = target.mark;
+      if (mark) {
+        if (!itn.mark) itn.mark = {};
+        orig.mark = {};
+        if (mark.type) {
+          orig.mark.type = itn.mark.type;
+          if (itn.mark.type === mark.type) {
+            delete itn.mark.type;
+          } else {
+            itn.mark.type = mark.type;
+          }
+        }
+        if (mark.label) {
+          orig.mark.label = itn.mark.label;
+          if (itn.mark.label) {
+            delete itn.mark.label
+          } else {
+            itn.mark.label = mark.label;
+          }
+        }
+        if (mark.dimmed) {
+          orig.mark.dimmed = itn.mark.dimmed;
+          if (itm.mark.dimmed) {
+            delete itn.mark.dimmed;
+          } else {
+            itn.mark.dimmed
+          }
+        }
+        if (!Object.keys(itn.mark).length) delete itn.mark;
+      }
+      /* return removed properties to allow post-change inspection */
+      return orig;
+    },
+    toggleMove: function (x, y, color) {
+      return this.toggleState(x, y, { color: color });
+    },
+    toggleMark: function (x, y, type, label) {
+      var state;
+
+      if (typeof type === boolean) {
+        state = { dimmed: true };
+      } else if (type === 'label') {
+        state = { label: label||'' };
+      } else {
+        state = { type: type };
+      }
+
+      return this.toggleState(x, y, state);
+    },
+    toggleHidden: function (x, y) {
+      return this.toggleState(x, y, { hidden: true });
     }
   }
 
