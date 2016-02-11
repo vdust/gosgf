@@ -31,7 +31,7 @@
   $.fn.goView = function (board, controls, toggle, loading) {
     var view = this.length ? this : $('body'),
         ctrl_dw, ctrl_dh,
-        wrap, svg, _board, ratio;
+        wrap, _board, ratio;
 
     if (!this.is('body')) throw new Error("body container support only");
 
@@ -87,14 +87,13 @@
         blackPris.text(0);
         blackName.text('Black');
       }
-      svg = wrap.children('svg')[0];
     }
 
     function setData(data) {
       loading.fadeOut();
       sv('sgfData', data);
       _board = sv('board');
-      /* default is to drawa redish outline on the stone
+      /* default is to draw red-ish outline on the stone
        * instead, we draw a circle mark here (can be overridden by another mark)
        */
       _board.lastMoveMark = {
@@ -321,7 +320,8 @@
     });
 
     $(win).on('resize', function () {
-      var w = $(win).width(), h = $(win).height();
+      var w = $(win).width(), h = $(win).height(),
+          svg = wrap.children('svg')[0];
       ratio = w / h;
 
       /* XXX sizing hack because of a bug that doesn't dynamically resize
@@ -358,6 +358,7 @@
           url = (hash.match(/^#url=(.*)$/)||[])[1],
           data = (hash.match(/^#data=(.*)$/)||[])[1];
 
+      sv('option', 'edit', false, true); /* disable edit mode */
       if (url && win.GOSGF_FETCH) {
         url = decodeURIComponent(url);
         if (!_board) setData(); /* page was just loaded. Load empty board */
@@ -386,6 +387,12 @@
              + 'C[Sgf test. [escaped\\] \\\n(this is on the same line)\nNew line.]'
              + 'PL[W]'
              + ')';
+      } else if (hash == '#edit') {
+        data = '(;SZ[19]EV[Edit test])';
+        sv('option', 'edit', true, true);
+        sv('option', 'edited', function () {
+          comment.val(_board.getFlatSgf().toSgf());
+        });
       } else {
         data = decodeURIComponent(data||'');
       }

@@ -113,6 +113,11 @@ button {
   padding: 0;
   position: fixed;
   z-index: 0;
+
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .go-sgf-loading {
