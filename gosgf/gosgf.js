@@ -1614,7 +1614,8 @@
       if (hasHidden) node.VW = vw; /* board partially visible */
       return new GoSgf(new GameTree([node]));
     },
-    toggleState: function (x, y, target) {
+    /* toggleState([dry,] x, y, target) */
+    toggleState: function (dry, x, y, target) {
       /* note: This is a quick editing tool that doesn't modify the underlying
        * gametree. Rendering the board again will clear the modifications.
        * one can use getFlatSgf() to save the state of the board as a
@@ -1625,48 +1626,69 @@
        *  mark: { ... }
        * }
        */
-      var itn = this._board[x + this._boardsize[0] * y],
-          orig = {},
-          c, mark;
+      var itn, orig = {}, c, mark;
 
-      this._renderedNav = null; /* no more nav sync at this point. */
+      if (typeof dry !== 'boolean') {
+        target = y;
+        y = x;
+        x = dry;
+        dry = false;
+      }
+
+      itn = this._board[x + this._boardsize[0] * y];
+      if (!itn) return false;
+
+      /* no more nav sync at this point. */
+      if (!dry) this._renderedNav = null;
 
       if ('color' in target) {
         orig.color = itn.color;
-        c = itn.getColor(target.color);
-        itn.color = (itn.color !== NONE) ? NONE : c;
+        if (!dry) {
+          c = itn.getColor(target.color);
+          itn.color = (itn.color !== NONE) ? NONE : c;
+        }
       }
+
       if ('hidden' in target) {
         orig.hidden = itn.hidden;
-        itn.hidden = (itn.hidden && target.hidden) ? false : !!target.hidden;
-        if (!itn.hidden) delete itn.hidden;
+        if (!dry) {
+          itn.hidden = (itn.hidden && target.hidden) ? false : !!target.hidden;
+          if (!itn.hidden) delete itn.hidden;
+        }
       }
+
       mark = target.mark;
       if (mark) {
         if (!itn.mark) itn.mark = {};
         orig.mark = {};
         if (mark.type) {
           orig.mark.type = itn.mark.type;
-          if (itn.mark.type === mark.type) {
-            delete itn.mark.type;
-          } else {
-            itn.mark.type = mark.type;
+          if (!dry) {
+            if (itn.mark.type === mark.type) {
+              delete itn.mark.type;
+            } else {
+              itn.mark.type = mark.type;
+            }
           }
         }
         if (mark.label) {
           orig.mark.label = itn.mark.label;
-          if (itn.mark.label) {
-            delete itn.mark.label
-          } else {
-            itn.mark.label = mark.label;
+          if (!dry) {
+            if (itn.mark.label) {
+              delete itn.mark.label
+            } else {
+              itn.mark.label = mark.label;
+            }
           }
         }
         if (mark.dimmed) {
           orig.mark.dimmed = itn.mark.dimmed;
-          if (itm.mark.dimmed) {
-            delete itn.mark.dimmed;
-          } else {
-            itn.mark.dimmed
+          if (!dry) {
+            if (itn.mark.dimmed) {
+              delete itn.mark.dimmed;
+            } else {
+              itn.mark.dimmed = true;
+            }
           }
         }
         if (!Object.keys(itn.mark).length) delete itn.mark;
@@ -1674,13 +1696,28 @@
       /* return removed properties to allow post-change inspection */
       return orig;
     },
-    toggleMove: function (x, y, color) {
-      return this.toggleState(x, y, { color: color });
+    toggleMove: function (dry, x, y, color) {
+      if (typeof dry !== 'boolean') {
+        color = y;
+        y = x;
+        x = dry;
+        dry = false;
+      }
+
+      return this.toggleState(dry, x, y, { color: color });
     },
-    toggleMark: function (x, y, type, label) {
+    toggleMark: function (dry, x, y, type, label) {
       var state;
 
-      if (typeof type === boolean) {
+      if (typeof dry !== 'boolean') {
+        label = type;
+        type = y;
+        y = x;
+        x = dry;
+        dry = false;
+      }
+
+      if (typeof type === 'boolean') {
         state = { dimmed: true };
       } else if (type === 'label') {
         state = { label: label||'' };
@@ -1688,10 +1725,16 @@
         state = { type: type };
       }
 
-      return this.toggleState(x, y, state);
+      return this.toggleState(dry, x, y, { mark: state });
     },
-    toggleHidden: function (x, y) {
-      return this.toggleState(x, y, { hidden: true });
+    toggleHidden: function (dry, x, y) {
+      if (typeof dry !== 'boolean') {
+        y = x;
+        x = dry;
+        dry = false;
+      }
+
+      return this.toggleState(dry, x, y, { hidden: true });
     }
   }
 
