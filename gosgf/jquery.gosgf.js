@@ -74,6 +74,9 @@
     this._create(options, container);
     return this;
   }
+  function labelDefault(next) {
+    next(prompt("Label:"));
+  }
   GoSgfViewer.prototype = {
     /* _create([options,] [container]) */
     _create: function (options, container) {
@@ -92,6 +95,7 @@
         style: 'inline',
         edit: false,
         action: 'stone',
+        label: null, /* function (cb, mods) {} // mods.shift, mods.alt, mods.ctrl */
         edited: null /* event when edit == true */
       };
 
@@ -110,27 +114,26 @@
       }
     },
     _editActions: {
-      CR: 'circle',
+      cr: 'circle',
       circle: 'circle',
-      MA: 'cross',
+      ma: 'cross',
       cross: 'cross',
-      SL: 'selected',
+      sl: 'selected',
       selected: 'selected',
-      SQ: 'square',
+      sq: 'square',
       square: 'square',
-      TR: 'triangle',
+      tr: 'triangle',
       triangle: 'triangle',
-      DD: 'dimmed',
+      dd: 'dimmed',
       dimmed: 'dimmed',
-      LB: 'label',
+      lb: 'label',
       label: 'label',
-      alpha: 'alpha', /* auto label */
-      number: 'number', /* auto label */
       stone: 'stone'
     },
     /* _setOption(key, value [, preventRefresh]) */
     _setOption: function (key, value, preventRefresh) {
-      var redraw = true;
+      var o = this.options,
+          redraw = true;
       switch (key) {
         case 'coordinates':
           value = !!value;
@@ -151,17 +154,21 @@
           if (value !== 'inline' && value !== 'css') return;
           break;
         case 'action':
-          value = this._editActions[value];
+          value = this._editActions[(''+value).toLowerCase()];
           if (!value) return;
-          redraw = false;
+          redraw = o.coordinates && o.edit;
           break;
         case 'edit':
           value = !!value;
+          redraw = o.coordinates;
+          break;
+        case 'label':
+          if (typeof value !== 'function') value = null;
         default:
           redraw = false;
       }
 
-      this.options[key] = value;
+      o[key] = value;
 
       if (preventRefresh) return redraw;
       if (redraw) {
@@ -244,15 +251,19 @@
         o.edited = x;
       } else if (arguments.length >= 2) {
         mods = mods||{};
-        this._editDoAction(x, y, mods);
-        if (typeof clk === 'function') clk(x, y, o.action, mods);
+        this._editDoAction(x, y, mods, function () {
+          if (typeof clk === 'function') clk(x, y, o.action, mods);
+        });
       }
     },
-    _editDoAction(x, y, mods) {
-      var action = this.options.action,
-          board = this._board;
-      
+    _editDoAction(x, y, mods, next) {
+      var self = this,
+          o = self.options,
+          action = o.action,
+          board = self._board, next, orig;
+
       if (!board) return;
+      next = next || function () {};
 
       switch (action) {
         case 'dimmed':
@@ -267,14 +278,30 @@
         case 'stone':
           board.toggleMove(x, y, (mods && mods.shift) ? 'white' : 'black');
           break;
-        case 'alpha':
-          break;
-        case 'number':
-          break;
         case 'label':
+          /* for labels, we need asynchronous capabilities to let applications
+           * get the label from the user. The default callback uses a
+           * synchronous prompt() call. */
+
+          /* dry test to get previous label */
+          orig = board.toggleMark(true, x, y, 'label', 'x');
+          if (orig.mark.label) {
+            /* label removal. no need for user input */
+            board.toggleMark(x, y, 'label', 'x');
+          } else {
+            /* there was no label: ask for the new label */
+            (o.label || labelDefault).call(null, function (lbl) {
+              board.toggleMark(x, y, 'label', lbl);
+              self.redraw();
+              next();
+            }, mods);
+            /* asynchronous from now on. exit now. */
+            return;
+          }
           break;
       }
-      this.redraw();
+      self.redraw();
+      next();
     },
     sgfData: function (data) {
       this._board = null;
@@ -331,6 +358,7 @@
     },
     redraw: function () {
       var self = this,
+          o = self.options,
           board = self._board,
           infos = self.svgInfos(),
           scale = infos.scale,
@@ -407,9 +435,37 @@
       function path(cls, d, style) {
         add('path', {
           'class': cls,
-          d: d,
+          d: ($.isArray(d) ? d.join(' ') : d),
           style: inline.apply(self, style||[])
         });
+      }
+      function cross(cls, x, y, r, style) {
+        /* r: circumscribed circle radius */
+        path(cls, [
+          'M'+(x-r)+' '+(y-r)+' L'+(x+r)+' '+(y+r),
+          'M'+(x+r)+' '+(y-r)+' L'+(x-r)+' '+(y+r)
+        ], style);
+      }
+      function square(cls, x, y, r, style) {
+        /* r: circumscribed circle radius */
+        path(cls, [
+          'M'+(x-r)+' '+(y-r),
+          'L'+(x-r)+' '+(y+r),
+          'L'+(x+r)+' '+(y+r),
+          'L'+(x+r)+' '+(y-r),
+          'Z'
+        ], style);
+      }
+      function triangle(cls, x, y, r, style) {
+        /* r: circumscribed circle radius */
+        var dx = 0.866025 * r,
+            dy = r / 2;
+        path(cls, [
+          'M'+x+' '+(y-r),
+          'L'+(x-dx)+' '+(y+dy),
+          'L'+(x+dx)+' '+(y+dy),
+          'Z'
+        ], style);
       }
       function rect(cls, x, y, w, h, style) {
         add('rect', {
@@ -462,7 +518,7 @@
       }
 
       /* add grid path */
-      path(pfx('board-grid'), lines.join(' '), [
+      path(pfx('board-grid'), lines, [
         STROKE + C_BLACK,
         S_WIDTH + '1',
         S_LINECAP + 'square',
@@ -496,11 +552,62 @@
       if (board) {
         if (coords) {
           /* draw next player indicator */
-          circle(pfx('board-next-player'), -scale, -scale, floor(scale/4), [
-            FILL + (board.nextplayer === board._board[0].WHITE ? C_WHITE : C_BLACK),
+          itn = board._board[0];
+          mx = my = -scale;
+          circle(pfx('board-next-player'), mx, my, floor(scale/4), [
+            FILL + (board.nextplayer === itn.WHITE ? C_WHITE : C_BLACK),
             STROKE + C_BLACK,
             S_WIDTH + '1'
           ]);
+
+          if (o.edit) {
+            isc = floor(scale/7);
+            cls = pfx('board-edit-mark');
+            c = (board.nextplayer === itn.BLACK ? C_WHITE : C_BLACK);
+            style = [
+              FILL + C_NONE,
+              STROKE + c,
+              S_WIDTH + '2'
+            ];
+            mark = null;
+            switch (o.action) {
+              case 'circle':
+                circle(cls, mx, my, isc, style);
+                break;
+              case 'cross':
+                cross(cls, mx, my, isc, style);
+                break;
+              case 'selected':
+                mark = 'SL';
+                break;
+              case 'square':
+                square(cls, mx, my, isc, style);
+                break;
+              case 'triangle':
+                triangle(cls, mx, my, isc, style);
+                break;
+              case 'dimmed':
+                mark = 'DD';
+                break;
+              case 'label':
+                mark = 'LB';
+                break;
+              case 'alpha':
+                mark = 'A';
+                break;
+              case 'number':
+                mark = '1';
+                break;
+            }
+            if (mark) {
+              addBody('text', mark, {
+                'class': cls,
+                x: mx,
+                y: my,
+                style: fontStyle(true, c, -scale/5)
+              });
+            }
+          }
         }
 
         lm = board.lastmove;
@@ -538,37 +645,18 @@
             ];
             cls = pfx('mark', 'mark-'+c, mark.type ? 'mark-'+mark.type : '');
             isc = floor(scale / 4);
-            lines = null;
             switch (mark.type) {
               case 'circle':
                 circle(cls, mx, my, isc, style);
                 break;
               case 'cross':
-                lines = [
-                  'M'+(mx-isc)+' '+(my-isc)+' L'+(mx+isc)+' '+(my+isc),
-                  'M'+(mx+isc)+' '+(my-isc)+' L'+(mx-isc)+' '+(my+isc)
-                ];
-                /* drawn below */
+                cross(cls, mx, my, isc, style);
                 break;
               case 'square':
-                lines = [
-                  'M'+(mx-isc)+' '+(my-isc),
-                  'L'+(mx-isc)+' '+(my+isc),
-                  'L'+(mx+isc)+' '+(my+isc),
-                  'L'+(mx+isc)+' '+(my-isc),
-                  'Z'
-                ];
+                square(cls, mx, my, isc, style);
                 break;
               case 'triangle':
-                isc = 1.25 * isc;
-                dx = 0.866025 * isc;
-                dy = isc / 2;
-                lines = [
-                  'M'+mx+' '+(my-isc),
-                  'L'+(mx-dx)+' '+(my+dy),
-                  'L'+(mx+dx)+' '+(my+dy),
-                  'Z',
-                ];
+                triangle(cls, mx, my, 1.25 * isc, style);
                 break;
               case 'selected':
                 rect(cls, mx - (scale / 2), my - (scale / 2), scale, scale, [
@@ -576,9 +664,6 @@
                   FILL + 'rgba(255, 255, 0, 0.5)' 
                 ]);
                 break;
-            }
-            if (lines) {
-              path(cls, lines.join(' '), style);
             }
             if (mark.label) {
               addBody('text', ''+mark.label, {
