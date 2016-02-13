@@ -159,13 +159,28 @@
       }
     });
 
+    function _editAction() {
+      /* this == action to set */
+      sv('option', 'action', this);
+    }
+
     var KBD_ACTIONS = {
       '32': _toggle, /* space */
       '33': 'first', /* page up */
       '34': 'last', /* page down */
       '37': 'prev', /* left */
-      '39': 'next' /* right */
+      '39': 'next', /* right */
+      '68': _editAction.bind('dd'), /* D */
+      '76': _editAction.bind('label'), /* L */
+      '77': _editAction.bind('stone'), /* M */
+      '79': _editAction.bind('cr'), /* O */
+      '83': _editAction.bind('sq'), /* S */
+      '84': _editAction.bind('tr'), /* T */
+      '88': _editAction.bind('ma'), /* X */
+      '90': _editAction.bind('sl'), /* Z */
+      '_': null
     };
+
     $(document).on('keydown', function (evt) {
       var action = KBD_ACTIONS[evt.which];
       if (evt.target.tagName == 'INPUT') return;

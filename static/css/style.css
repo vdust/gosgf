@@ -119,6 +119,9 @@ button {
   -ms-user-select: none;
   user-select: none;
 }
+.go-sgf-board svg text {
+  cursor: default;
+}
 
 .go-sgf-loading {
   position: fixed;
