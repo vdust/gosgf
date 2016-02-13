@@ -1,0 +1,22 @@
+doctype html
+html(lang='en')
+  head
+    - var staticPath = req.baseUrl + '/static'
+    meta(charset='utf-8')
+    title License (MIT)
+    link(href='https://fonts.googleapis.com/css?family=Open+Sans:400,700,400italic,700italic', rel='stylesheet', type='text/css')
+    link(href=staticPath+'/css/github-markdown.css', rel='stylesheet', type='text/css')
+    style.
+      body{font-family:'Open Sans'}
+      .markdown-body {
+        font-family: inherit;
+        box-sizing: border-box;
+        min-width: 200px;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 45px;
+      }
+    //-
+  body
+    div.markdown-body
+      != license
